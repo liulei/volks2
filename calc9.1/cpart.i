@@ -1,0 +1,3 @@
+C  !CPART
+      REAL*8 PUTDSTRP(4)
+      COMMON / PART / PUTDSTRP
