@@ -12,7 +12,7 @@ This pipeline is designed to conduct single pulse search and localization in reg
 - Single pulse search, multiple baselines match and localization with no extra software dependent.  
 - Full parellelization (with `mpi4py`) and GPU support (with `PyTorch` and `CuPy`). Optimized for multiple nodes GPU clusters.
 
-The whole pipeline has been extensively tested with EVN observation `el060`. 
+The whole pipeline has been extensively tested with the data of EVN observation `el060`. 
 
 ## Acknowledgement
 The development of this pipeline is supported by the National Science Fundation of China (No. 11903067).  
