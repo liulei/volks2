@@ -8,7 +8,7 @@ This pipeline is designed to conduct single pulse search and localization in reg
 
 ## Main features
 
-- Flexible configurations: arbitrary selection of IFs, polarizations and baselines; easy adjustment of search parameters;
+- Flexible configurations: arbitrary selection of IFs, polarizations, baselines and dm values; easy adjustment of control parameters;
 - Single pulse search, multiple baselines match and localization with no extra software dependent.  
 - Full parellelization (with `mpi4py`) and GPU support (with `PyTorch` and `CuPy`). Optimized for multiple nodes GPU clusters.
 
@@ -47,13 +47,45 @@ The author has tried his best to make the pipeline easy to understand and use. H
 ### Prepare configuration: `utils.py`
 **Description**:
 
-- All programs in the pipeline will first call `utils.gen_cfg()` to get the configuration, so as to avoid modifications to those programs. Therefore one need to set specific task in `gen_cfg()` and then prepare the corresponding configuration file, e.g. `gen_cfg_el060()`.
+- All programs in the pipeline will first call `utils.gen_cfg()` to get the configuration, so as to avoid modifications to those programs. Therefore one need to set specific task in `gen_cfg()` and then prepare the corresponding configuration file, e.g. `gen_cfg_el060()`. The description of each term will be explained in the source file.
+
+**Input**:
+
+- Once `gen_cfg()` is invoked, `load_config()` will read and parse the `.input` and `.calc` files of the corresponding scan, and generate the configuraiton class.
+
+
+### Initial calibration: `gen_cal_initial.py`
+**Description**:
+
+- This program will conduct fringe fit for each IF and polarization, and then derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
+
+**Input**:
+
+- `scan_no` and time range (`t1` and `t2`) of calibration scan. 
+- Visibility file (`.swin`) of calibration scan.
+
+
+### Fringe fitting: `pfit.py`
+**Description**:
+
+- This file contains the main rountine for single pulse  search. Since SP search is consuming, the whole process is fully parallalized. If available, GPU will be used for speedup. 
+
+- For each scan, data is divided into small pieces based on time, e.g., every 0.5 second, and then sent to the calculation process. Each of the selected baselines in this time range are processed and saved in the disk as segXXXX.npy. 
+
+**Input**:
+
+- `cal_initial.npy`: initial calibration file
+- Visibility file (`.swin`) of target scan.
+
+**Output**:
+
+- `NoXXXX/segXXXX.npy`:  (fringe fitting) result of one baseline in the give time range. 
+
 
 
 ### Setup environment
 - Run command `source environment`.
 - This will tell `calc` where to find `JPLEPH` and `Horizons.lis`. Please keep other settings unchanged.
-
 
 
 ### Calibration: `genswincal.py`
