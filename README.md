@@ -30,15 +30,7 @@ Please do not hesitate to contact me (liulei@shao.ac.cn) if you have any quation
 - Linux or MacOS system.
 - gcc, gfortran, Python3, numpy, ctypes, matplotlib (for making )
 
-## Compile
-```
-cd calc9.1
-make
-```
-This will generate `libcalc_cwrapper.so`. The modification is based on `calcserver` distributed with DiFX-2.4:
 
-- Add variable `PUTDSTRP`, `PARTIAL` to `cdrvr.f`, `calcmodl2.f` and `cpart.i`, so as to obtain partial derivatives of delay with Ra and Dec. 
-- Provide C wrapper for `CALC` (`libcalc_cwrapper.so`), which will be called by `solve_all.py` with `ctypes` to obtain partial derivatives.
 
 ## Run
 
@@ -57,20 +49,44 @@ The author has tried his best to make the pipeline easy to understand and use. H
 ### Initial calibration: `gen_cal_initial.py`
 **Description**:
 
-- This program will conduct fringe fit for each IF and polarization, and then derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
+- This program will conduct fringe fit for each IF and polarization of the calibration scan, and then derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
 
 **Input**:
 
 - `scan_no` and time range (`t1` and `t2`) of calibration scan. 
 - Visibility file (`.swin`) of calibration scan.
 
+**Output**:
+
+- `cal_initial.npy`
+
 
 ### Fringe fitting: `pfit.py`
 **Description**:
 
-- This file contains the main rountine for single pulse  search. Since SP search is consuming, the whole process is fully parallalized. If available, GPU will be used for speedup. 
+- This is the main routine of the volks2 pipeline. Visibility data is processed in the follow steps:
+    1. Load calibration information of each baseline (cal_initial.npy);
+    2. For the given time range of a scan:
+    3. For each baseline, load corresponding vis data and conduct calibration, then sum all pols together;
+    4. For each dm, conduct dedispersion;
+    5. For each nsum, combine `nsum` APs together and conduct fringe fitting, save the amplitude after fringe fitting;
+    6. Repeat 2 - 5 until vis data of that scan is processed.
 
-- For each scan, data is divided into small pieces based on time, e.g., every 0.5 second, and then sent to the calculation process. Each of the selected baselines in this time range are processed and saved in the disk as segXXXX.npy. 
+- To conduct SP search, the integraiton time (accumulation period, AP) is usually very small, e.g. 1.024 ms. Then several these APs are combined together to form different "windows", e.g., 2 ms, 4 ms, 8 ms and 16 ms. This is determined by the `nsum` parameter. One may find the snum setting in the `utils.py` file: `cfg.nsum = [2, 4, 8, 16]`. 
+
+- In blind search mode, the dm of the SP is unknown, therefore one has to setup of list of dms, e.g., from 50 to 1000 with an interval of 50. For pulsar observation, the dm is known. Therefore one only needs to set one dm value.
+
+- For parallelization, data is divided into small pieces based on time, e.g., every 0.5 second, and then sent to the calculation process. The fitting process is invoked with `mpi` command:
+
+    `mpirun -np nproc -host hostfile ./pfit.py`
+    
+  At least 2 procs are required. The result from this calculation process will be saved as  Depends on the size of the vis data, the fringe fitting might take hours. The fitting result of each time piece will be saved in the disk in the name `NoXXXX/segXXXX.npy` (see **output** for a detailed explanation of the file structure), so as to prevent from being lost even if the execution of `pfit.py` is interupted unexpectly. Next time `pfit.py` is invoked, those already have been processed will be skipped automatically. 
+  
+- Once fringe fitting process is finished, one may have to rerun `./pfit.py` in a single process:
+
+    `./pfit.py`
+    
+  The program will realize only one proc is invoked and therefore call `combine_seg()`. This will combine all seg files in the corresponding scan_no to a single `NoXXXX/fitdump.npy` file.
 
 **Input**:
 
@@ -79,79 +95,95 @@ The author has tried his best to make the pipeline easy to understand and use. H
 
 **Output**:
 
-- `NoXXXX/segXXXX.npy`:  (fringe fitting) result of one baseline in the give time range. 
+- `NoXXXX/segXXXX.npy`: fringe fitting result of one baseline in the give time range. Note that each of these seg file contains fitting result of **only one** baseline. 
+- `NoXXXX/fitdump.npy`: this file contains fitting result of one scan. It is organized as a series of dicts of different level:
+ 
+    `d = np.load('NoXXXX/fitdump.npy', allow_pickle=True).item()`
+    `arr = d[bl_id][dm][nsum]`
 
+  `arr` is a array of `dtype_fit`. Note that in most of cases only `mag` in the dtype arrray is meaningful. 
 
-
-### Setup environment
-- Run command `source environment`.
-- This will tell `calc` where to find `JPLEPH` and `Horizons.lis`. Please keep other settings unchanged.
-
-
-### Calibration: `genswincal.py`
-
-**Description**:
-
-- Carry out fringe fitting for calibrtion source. PCAL and channel delay are set to zero and are output after fitting.
-
-**Input**: 
-
-- DiFX calibration scan, baseline, frequency information.
-- Fill in required info for `DiFX()`, `DiFXScan()` and `DataDescriptor()`. **You have to specify baseline and frequency information manually!** 
-- Specify fitting details in `fit_multiband()`, e.g, FFT size for MBD (`nmb`) and SBD (`nsb`) search. The PCAL and channel delay fitting results will be print out.
-
-**Output**: 
-
-- PCAL and channel delay for each frequency channel (IF in AIPS) are print out.
-
-### Fringe fitting: `genswindump.py`
-
-**Description:**
-
-- Carry out fringe fitting for each fast dumped visibilities (time segment in Liu et al. 2018a) of several given re-sampling time (`nsum`).
-
-**Input**: 
-
-- Fill in `pcal_dict{}` and `sbd_dict{}` with PCAL and channel delay information derived in previous step. 
-- Configurations of `DifX()` and `DataDescriptor()` are similar with `genswincal.py`. 
-- Specify re-sampling time in `nsum_list`. `nsum` means number of accumulation period to be summed. 
-- Specify fitting details in `fit_multiband()`, e.g, FFT size for MBD (`nmb`) and SBD (`nsb`) search. 
-
-**Output**: 
-
-- `blxxx_sumxxx_offsetxxx.fitdump`, records time, width and pulsar phase of each time segment in the given re-sampling time.
-
-### Windows filtering: `winmatch.py`
+### Single baseline windows filtering: `winmatch.py`
 
 **Description**:
 
-- First pick up single pulses from fast dumped data of each re-sampling time according to given threshold, then counting how many windows (re-sampling time) in which they are detected. 
-- Single pulses are output if they are detected in at least `ne_min` windows.
+- Conduct window filtering from multiple `nsum`. For each dm, first pick up SP according to threshold from fitdump file of previous step. Then count the number of windows (nsums) in which they are detected. 
+- Single pulses are output if they are detected in at least `ne_min` windows. `ne_min` is set in configuration class. 
 
 **Input**:
 
-- `blxxx_sumxxx_offset.fitdump` files in previous step.
-- Specify re-sampling time in `nsum_list`, which should be identical with `genswindump.py`. 
-- Specify filtering parameters, including threshold to pick up single pulses (`sigma`), minimum number of detected windows (`ne_min`).
+- `NoXXXX/fitdump.npy`
+- Specify filtering parameters, including threshold to pick up single pulses (`cfg.sigma_winmatch`), minimum number of detected windows (`cfg.ne_min_winmatch`).
 
 **Output**:
 
-- `blxxx.nsum`, records time, width and pulsar phase of each single pulse candidate after multiple window size filtering.
+- `NoXXXX/dmxxx.xxx/blxxx.nsum`, records time, width of each single pulse candidate after multiple window size (nsum) filtering.
 
 ### Multiple baselines cross matching: `crossmatch.py`
 
 **Description**:
 
-- Cross matching single pulses detected on multiple baselines.
-- A single pulse is output if it is detected on at least `count_min` baselines.
+- Cross matching SPs detected on multiple baselines for each dm.
+- A single pulse is output if it is detected on at least `nbl_min` baselines.
 
 **Input**:
 
-- 'blxxx.nsum' files in previous step.
-- Specify `count_min`.
+- `NoXXXX/dmxxx.xxx/blxxx.nsum` files in previous step.
+- Specify `cfg.nbl_min_crossmatch`.
 
 **Output**:
 
-- 'scanxxx_sss.ssssss.sp', generated for every individual single pulses. Records baseline id it is detected, time, width and pulsar phase on this baseline.
+- `NoXXXX_dmxxx.xxx_sss.ssssss.sp`, generated for every individual SP. Each line corresponds to detection info from one baseline. Columns are:
+    - col 0: baseline id
+    - col 1: start AP id
+    - col 2: number of AP (nsum)
+    - col 3: SP detection time (since scan start)
+    - col 4: SP duration, in s
+    - col 5: baseline residual delay, in ns
+    - col 6: SP power, in units of sigma
+    - col 7: baseline name, comments only, will not be read
 
+Note: Due to the slightly different implementation of fitting algorithm, if GPU (with PyTorch or CuPy) is used, mbd will be zero. If available, this quantity can be used for solving. However `sp_fit.py` will conduct fine fitting and yield higher accuracy, and is therefore prefered and used as the default quantity for solving. 
 
+### Fine fit for individual SP: `sp_fit.py`
+
+**Description**:
+
+- Read `.sp` file, conduct fine fit for the corresponding baselines,  derive delay and SNR.
+
+- The program will call `utils.read_sp()`, which converts txt file to dict. Fitting result are inserted to the dict and saved.
+
+**Input**:
+
+- `.sp` file
+
+**Output**:
+
+- `.sp.npy` file, the program will convert the `.sp` (txt format) file to dict, insert fitting result (calibrated and dedispersed vis data, tau, SNR, tau_sig) and save the dict as `.npy` format.
+
+### Calculation partials: `sp_calc.py`
+
+**Description**:
+
+- The pipeline derives SP location by solving a set of linear equations given the relation (partial) between the residual delay and the offset to a priori position. The partial calculation is conduct with `calc9.1`. 
+
+- `calc9.1` is written in FORTRAN. I have add variable `PUTDSTRP`, `PARTIAL` to `cdrvr.f`, `calcmodl2.f` and `cpart.i`, so as to obtain partial derivatives of delay with Ra and Dec. 
+
+- A wrapper is developed to provide IO in C interface. The whole program is packaged to a lib: `libcalc_cwrapper.so`.
+ 
+- `sp_calc.py` interacts with the wrapper via `ctypes` package and obtain the partial derivatives. 
+
+- For setup, one need to
+    - Complie library in your own platform:
+    
+      `cd calc9.1`
+      
+      `make`
+      
+      This will generate `libcalc_cwrapper.so`
+      
+    - Run command 
+    
+      `source environment` 
+      
+      This will tell `calc9.1` where to find `JPLEPH` and `Horizons.lis`. Please keep other settings in `environment` unchanged.
