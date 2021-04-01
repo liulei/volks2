@@ -1,5 +1,5 @@
 # VOLKS2
-### VLBI Observation single pulse Localization Keen Searcher (2nd release)
+### VLBI Observation for single pulse Localization Keen Searcher, 2nd release
 
 ## Introduction
 This is the second release of the VOLKS pipeline. Significant updates have been made since the last release. 
@@ -23,18 +23,24 @@ The development of this pipeline is supported by the National Science Fundation 
 - `Liu, L., Zheng, W., Yan, Z. & Zhang, J. 2018, Research in Astronomy and Astrophysics, 18, 069`, which compares the cross spectrum based method and the auto based spectrum method for single pulse serach in VLBI observation.
 - `Liu, L., Jiang, W., Zheng, W., et al. 2019, AJ, 157, 138`, which describes the radio imaging and astrometric solving single pulse localzation methods.
 
-Please do not hesitate to contact me (liulei@shao.ac.cn) if you have any quation.
+Please do not hesitate to contact me (E-mail: liulei@shao.ac.cn, WeChat: thirtyliu) if you have any question.
 
-## Requirement
+## Platform requirement
 
 - Linux or MacOS system.
-- gcc, gfortran, Python3, numpy, ctypes, matplotlib (for making )
-
-
+- gcc, gfortran, Python3, numpy, ctypes, matplotlib (required only for plotting), PyTorch or CuPy (for GPU support).
 
 ## Run
 
-The author has tried his best to make the pipeline easy to understand and use. However, due to the complexity of VLBI data processing, it still requires some effort to have it run and give the final result. Since the Python code is self-explanatory, it is stronly suggested that the user read the source code and figure out how it works. I will give short explanation (**Description**, **Input** and **Output**) for each step.
+I have tried my best to make the pipeline easy to understand and use. However, due to the complexity of VLBI data processing, it still requires some effort to have it run and give the final result. Since the Python code is self-explanatory, it is stronly suggested that the user read the source code and figure out how it works. I will give short explanation (**Description**, **Input** and **Output**) for each step.
+
+### Correlation
+
+VOLKS2 pipeline conduct SP search and localization with DiFX correlation result. To search the whole FoV, some settings in the correlation process are suggested:
+
+- Clock: clock rate should be adjusted such that fringe rate (clock rate times sky frequency) within 10 mHz; no special requirement for clock offset. IF delay will be corrected in the calibration process.
+
+- FFT size: to cover the whole FoV, the minimum FFT size is specified in equation (12) of Liu et al. (2018). E.g., for 30 meter telescope with 3000 km baseline, in L band, the recommended FFT size  is 1024.
 
 ### Prepare configuration: `utils.py`
 **Description**:
@@ -173,7 +179,7 @@ Note: Due to the slightly different implementation of fitting algorithm, if GPU 
  
 - `sp_calc.py` interacts with the wrapper via `ctypes` package and obtain the partial derivatives. 
 
-- For setup, one need to
+- For setup：
     - Complie library in your own platform:
     
       `cd calc9.1`
@@ -187,3 +193,39 @@ Note: Due to the slightly different implementation of fitting algorithm, if GPU 
       `source environment` 
       
       This will tell `calc9.1` where to find `JPLEPH` and `Horizons.lis`. Please keep other settings in `environment` unchanged.
+
+**Input**:
+
+- `.sp.npy`: the program will recognize stations of each baseline, and calculate partial at given time.
+
+**Output**:
+
+- `.sp.npy`: add `pd` key in the dict and save.
+
+### Fine calibration: `gen_cal_fine.py`
+
+**Description**:
+
+- The pipeline provides limited fine calibration support in the solving process. This utilizes the fringe fitting result of nearby reference source, which usually gives a delay correction within 10 ns. This calibration is still in the very preliminary stage, which is not guaranteed to improve the localization accuracy.
+
+**Input**:
+
+- Scans of nearby strong radio source with accurate known position.
+
+**Output**:
+
+- `cal_fine_NoXXXX.npy`: fringe fitting result per baseline of fine calibration scan.
+
+
+### Localization: `sp_solve.py`
+
+**Description**:
+
+- This program reads the partial derivatives and delay of each baseline, solves linear equations about offset to the a priori position. 
+
+- To guarantee solving accuracy, the program could conduct selection in the data. According to the test, a SNR of above 7, at least 3 baselines (although 2 baselines are already solvable) are prefered.
+
+**Input**:
+
+- `.sp.npy`: `pd`, `tau`, `snr` keys of each baseline are required.
+- `cal_fine_NoXXXX.npy`: optional fine calibration data. One need to specify the nearby calibration source when solving.
