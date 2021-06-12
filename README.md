@@ -2,50 +2,60 @@
 ### VLBI Observation for single pulse Localization Keen Searcher, 2nd release
 
 ## Introduction
-This is the second release of the VOLKS pipeline. Significant updates have been made since the last release. 
+This is the second release of the VOLKS pipeline. Significant updates have been made since its first release. 
 
-This pipeline is designed to conduct single pulse search and localization in regular VLBI observations. Unlike the radio imaging based pipeline, in VOLKS, the search and localization are two independent steps. The search step takes the idea of geodetic VLBI post processing, which fully uses the cross spectrum fringe phase information to maximize the signal power. Compared with auto spectrum based method, it is able to extract single pulses from highly RFI contaminated data. The localization uses the astrometric solving methods, which derives the single pulse location by solving a set of linear equations given the relation between the residual delay and the offset to a priori position. 
+VOLK2 is designed for single pulse search and localization in regular VLBI observations as well as single pulse detections from known sources in dedicated observations. In VOLKS2, the search and localization are two independent steps. The search step takes the idea of geodetic VLBI post processing, which fully utilizes the cross spectrum fringe phase information to maximize the signal power. Compared with auto spectrum based method, it is able to extract single pulses from highly RFI contaminated data. The localization uses the geodetic VLBI solving methods, which derives the single pulse location by solving a set of linear equations given the relation between the residual delay and the offset to a priori position. 
 
-## Main features
+## Highlights
 
-- Flexible configurations: arbitrary selection of IFs, polarizations, baselines and dm values; easy adjustment of control parameters;
-- Single pulse search, multiple baselines match and localization with no extra software dependent.  
-- Full parellelization (with `mpi4py`) and GPU support (with `PyTorch` and `CuPy`). Optimized for multiple nodes GPU clusters.
+- Whole FoV transient search in regular VLBI observations as commensal task;
+- Single pulse detection from known sources in dedicated observation;
+- No requirement for RFI excision;
+- High accuracy single pulse localization with VLBI method.
 
-The whole pipeline has been extensively tested with the data of EVN observation `el060`. 
+## Main functions
+
+- Flexible configurations: arbitrary selection of IFs, polarizations, baselines and DM values; easy adjustment of control parameters;
+- Full FoV (Field of View) single pulse search;
+- Geodetic VLBI solving for single pulse localization;
+- DM search;
+- GPU support (PyTorch and CuPy);
+- Full parellelization (with `mpi4py`), optimized for multi nodes GPU clusters.
+
+The whole pipeline has been tested with EVN observation EL060.
 
 ## Acknowledgement
 The development of this pipeline is supported by the National Science Fundation of China (No. 11903067).  
 
-**Note**: If you make use of VOLKS pipeline in your publication, we require that you quote the pipeline web address https://github.com/liulei/volks2 and cite the following papers:
+**Note**: If you make use of VOLKS2 pipeline in your publication, we require that you quote the pipeline web address https://github.com/liulei/volks2 and cite the following papers:
 
-- `Liu, L., Tong, F., Zheng, W., Zhang, J. & Tong, L. 2018, AJ, 155, 98`, which describes the non-imaging single pulse search method.
+- `Liu, L., Tong, F., Zheng, W., Zhang, J. & Tong, L. 2018, AJ, 155, 98`, which describes the cross spectrum based single pulse search method.
 - `Liu, L., Zheng, W., Yan, Z. & Zhang, J. 2018, Research in Astronomy and Astrophysics, 18, 069`, which compares the cross spectrum based method and the auto based spectrum method for single pulse serach in VLBI observation.
-- `Liu, L., Jiang, W., Zheng, W., et al. 2019, AJ, 157, 138`, which describes the radio imaging and astrometric solving single pulse localzation methods.
+- `Liu, L., Jiang, W., Zheng, W., et al. 2019, AJ, 157, 138`, which describes the geodetic solving based single pulse localzation method.
 
 Please do not hesitate to contact me (E-mail: liulei@shao.ac.cn, WeChat: thirtyliu) if you have any question.
 
 ## Platform requirement
 
-- Linux or MacOS system.
-- gcc, gfortran, Python3, numpy, ctypes, matplotlib (required only for plotting), PyTorch or CuPy (for GPU support).
+- Linux, MacOS, WSL.
+- gcc/clang, gfortran, Python3, NumPy, ctypes, matplotlib (required only for plotting), PyTorch or CuPy (for GPU).
 
 ## Run
 
-I have tried my best to make the pipeline easy to understand and use. However, due to the complexity of VLBI data processing, it still requires some effort to have it run and give the final result. Since the Python code is self-explanatory, it is stronly suggested that the user read the source code and figure out how it works. I will give short explanation (**Description**, **Input** and **Output**) for each step.
+I have tried my best to make the pipeline easy to understand and use. However, due to the complexity of VLBI data processing, it still requires some efforts to have it run and get the final result. Since the Python code is self-explanatory, it is stronly suggested that users read the code and figure out how it works. I will give short explanation (**Description**, **Input** and **Output**) for each step.
 
 ### Correlation
 
-VOLKS2 pipeline conduct SP search and localization with DiFX correlation result. To search the whole FoV, some settings in the correlation process are suggested:
+VOLKS2 conducts SP search and localization with DiFX correlation result. Some settings in the correlation process are suggested:
 
-- Clock: clock rate should be adjusted such that fringe rate (clock rate times sky frequency) within 10 mHz; no special requirement for clock offset. IF delay will be corrected in the calibration process.
+- Clock: clock rate should be adjusted such that fringe rate (clock rate multiplied with sky frequency) within 10 mHz; no special requirement for clock offset, as small as possible. 
 
-- FFT size: to cover the whole FoV, the minimum FFT size is specified in equation (12) of Liu et al. (2018). E.g., for 30 meter telescope with 3000 km baseline, in L band, the recommended FFT size  is 1024.
+- FFT size: to cover the whole FoV, the minimum FFT size is specified in equation (12) of Liu et al. (2018). E.g., for 32 meter telescope, 3000 km baseline, L band, the recommended FFT size is 1024.
 
 ### Prepare configuration: `utils.py`
-**Description**:
+**Description**
 
-- All programs in the pipeline will first call `utils.gen_cfg()` to get the configuration, so as to avoid modifications to those programs. Therefore one need to set specific task in `gen_cfg()` and then prepare the corresponding configuration file, e.g. `gen_cfg_el060()`. The description of each term will be explained in the source file.
+- All programs in the pipeline will first call `utils.gen_cfg()` to obtain the configuration. In this way modification of source code in any other programs is avoided. One need to set the specific task in `gen_cfg()` and then prepare the corresponding configuration class in e.g. `gen_cfg_el060()`. The description of each term is explained in the source file.
 
 **Input**:
 
@@ -55,7 +65,7 @@ VOLKS2 pipeline conduct SP search and localization with DiFX correlation result.
 ### Initial calibration: `gen_cal_initial.py`
 **Description**:
 
-- This program will conduct fringe fit for each IF and polarization of the calibration scan, and then derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
+- This program will conduct fringe fitting for each baseline, polarization and IF of the calibration scan, and derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
 
 **Input**:
 
@@ -64,35 +74,30 @@ VOLKS2 pipeline conduct SP search and localization with DiFX correlation result.
 
 **Output**:
 
-- `cal_initial.npy`
-
+- `cal_initial.npy`: initial phase and delay for each baseline, polarization and IF of calibration source.
 
 ### Fringe fitting: `pfit.py`
 **Description**:
 
-- This is the main routine of the volks2 pipeline. Visibility data is processed in the follow steps:
-    1. Load calibration information of each baseline (cal_initial.npy);
-    2. For the given time range of a scan:
-    3. For each baseline, load corresponding vis data and conduct calibration, then sum all pols together;
-    4. For each dm, conduct dedispersion;
-    5. For each nsum, combine `nsum` APs together and conduct fringe fitting, save the amplitude after fringe fitting;
-    6. Repeat 2 - 5 until vis data of that scan is processed.
+- This is the main routine of the VOLKS2 pipeline. It can be divided into 6 steps. The detailed explanation is given in Sec. 2.4.2 of the paper. 
 
-- To conduct SP search, the integraiton time (accumulation period, AP) is usually very small, e.g. 1.024 ms. Then several these APs are combined together to form different "windows", e.g., 2 ms, 4 ms, 8 ms and 16 ms. This is determined by the `nsum` parameter. One may find the snum setting in the `utils.py` file: `cfg.nsum = [2, 4, 8, 16]`. 
+- To conduct SP search, the integraiton time (accumulation period, AP) is usually very small, e.g. 1.024 ms. Then several these APs are combined together according to pre-set window sizes, e.g., 2 ms, 4 ms, 8 ms and 16 ms. This is determined by the `nsum` parameter. One may find the snum setting in the `utils.py` file: `cfg.nsum = [2, 4, 8, 16]`. 
 
-- In blind search mode, the dm of the SP is unknown, therefore one has to setup of list of dms, e.g., from 50 to 1000 with an interval of 50. For pulsar observation, the dm is known. Therefore one only needs to set one dm value.
+- In the search mode, the DM of the SP is unknown, therefore one has to setup a DM list, e.g., from 50 to 1000 with an interval of 50: `cfg.dms  =   np.arange(50., 1000., 50.)`. For single pulse detection with known source, DM search is not required. Set one DM value: `cfg.dms = [26.833]` (for PSR J0332+5434).
 
-- For parallelization, data is divided into small pieces based on time, e.g., every 0.5 second, and then sent to the calculation process. The fitting process is invoked with `mpi` command:
+- GPU acceleration. VOLKS2 provides GPU support with Torch and CuPy frameworks. `main()` function in `pfit.py` gives the demo of backend selection. The default is `numpy`, which selects CPU. `torch` and `cupy` select GPU. According to my test, the performance of these two GPU backends are similar. Once GPU are selected. `open_XXX()` will be called for GPU initilization. The calculation procs will be mapped to GPU devices. E.g., proc 1 for dev 0, proc 2 for dev 1, etc. To reduce the kernel launch and data upload overhead of GPU devices,  the data size should be as large as possible. E.g., `t_seg` is set to 4.0 s to 8.0 s for GPU backends. 
+
+- For parallelization, data is divided into small pieces, e.g., 0.5 second per seg for numpy backend (CPU), and then sent to the calculation process. The fitting process is invoked with `mpi` command:
 
     `mpirun -np nproc -host hostfile ./pfit.py`
     
-  At least 2 procs are required. The result from this calculation process will be saved as  Depends on the size of the vis data, the fringe fitting might take hours. The fitting result of each time piece will be saved in the disk in the name `NoXXXX/segXXXX.npy` (see **output** for a detailed explanation of the file structure), so as to prevent from being lost even if the execution of `pfit.py` is interupted unexpectly. Next time `pfit.py` is invoked, those already have been processed will be skipped automatically. 
+  At least 2 procs are required. Depends on the size of the vis data, the fringe fitting for each scan might take tens of minutes. The fitting result of each seg will be saved in the disk in the name `NoXXXX/segXXXX.npy` (see **output** for an explanation of the file structure), so as to prevent from being lost even if the execution of `pfit.py` is interupted unexpectly. Next time `pfit.py` is invoked, those already have been processed will be skipped automatically. 
   
-- Once fringe fitting process is finished, one may have to rerun `./pfit.py` in a single process:
+- Once fringe fitting process is finished, rerun `./pfit.py`:
 
     `./pfit.py`
     
-  The program will realize only one proc is invoked and therefore call `combine_seg()`. This will combine all seg files in the corresponding scan_no to a single `NoXXXX/fitdump.npy` file.
+The program will realize only one proc is invoked and therefore call `combine_seg()`. This will combine all seg files in the scan_no to a single `NoXXXX/fitdump.npy` file.
 
 **Input**:
 
@@ -101,7 +106,7 @@ VOLKS2 pipeline conduct SP search and localization with DiFX correlation result.
 
 **Output**:
 
-- `NoXXXX/segXXXX.npy`: fringe fitting result of one baseline in the give time range. Note that each of these seg file contains fitting result of **only one** baseline. 
+- `NoXXXX/segXXXX.npy`: fringe fitting result of one baseline in the give time range. Note that every such kind of these seg files contains fitting result of **only one** baseline. 
 - `NoXXXX/fitdump.npy`: this file contains fitting result of one scan. It is organized as a series of dicts of different level:
  
     `d = np.load('NoXXXX/fitdump.npy', allow_pickle=True).item()`
@@ -165,7 +170,7 @@ Note: Due to the slightly different implementation of fitting algorithm, if GPU 
 
 **Output**:
 
-- `.sp.npy` file, the program will convert the `.sp` (txt format) file to dict, insert fitting result (calibrated and dedispersed vis data, tau, SNR, tau_sig) and save the dict as `.npy` format.
+- `.sp.npy` file, the program will convert the `.sp` (txt format) file to dict, insert fitting result (initial calibrated and dedispersed vis data, tau, SNR, tau_sig) and save the dict as `.npy` format.
 
 ### Calculation partials: `sp_calc.py`
 
@@ -206,26 +211,26 @@ Note: Due to the slightly different implementation of fitting algorithm, if GPU 
 
 **Description**:
 
-- The pipeline provides limited fine calibration support in the solving process. This utilizes the fringe fitting result of nearby reference source, which usually gives a delay correction within 10 ns. This calibration is still in the very preliminary stage, which is not guaranteed to improve the localization accuracy.
+- VOLKS2 pipeline improves localization accuracy with fine calibration. See Sec. 3.1.2 and Fig. 7 for the remarkable result.  This program conducts fringe fitting with nearby fine calibration source and saves the fitting result (per baseline residual delay of calibration source).
 
 **Input**:
 
-- Scans of nearby strong radio source with accurate known position.
+- Fine calibration scan that observes nearby strong radio source with accurate position.
 
 **Output**:
 
-- `cal_fine_NoXXXX.npy`: fringe fitting result per baseline of fine calibration scan.
+- `cal_fine_NoXXXX.npy`: fringe fitting result (residual delay) per baseline of fine calibration source.
 
 
 ### Localization: `sp_solve.py`
 
 **Description**:
 
-- This program reads the partial derivatives and delay of each baseline, solves linear equations about offset to the a priori position. 
+- This program reads the partial derivatives and delay of each baseline of the targets, as well as fine calibration result, solves linear equations about offset to the a priori position (Eq. 2). 
 
 - To guarantee solving accuracy, the program could conduct selection in the data. According to the test, a SNR of above 7, at least 3 baselines (although 2 baselines are already solvable) are prefered.
 
 **Input**:
 
 - `.sp.npy`: `pd`, `tau`, `snr` keys of each baseline are required.
-- `cal_fine_NoXXXX.npy`: optional fine calibration data. One need to specify the nearby calibration source when solving.
+- `cal_fine_NoXXXX.npy`: fine calibration result. One need to specify the nearby calibration source when solving.

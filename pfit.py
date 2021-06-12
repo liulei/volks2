@@ -255,6 +255,7 @@ def fit_cupy(cfg, t0, t1, bl_no):
         s_d[:, :]   =   0.0
         for fid in range(cfg.nfreq):
             id_mc   =   cfg.id_mcs[fid]
+# no use, never uncomment
 #            s_d[:, id_mc:id_mc+cfg.nchan]    =   \
 #                    buf_d[:, fid, :]
             for vid in range(cfg.nchan):
@@ -263,17 +264,15 @@ def fit_cupy(cfg, t0, t1, bl_no):
                 s_d[0:nap1 - n_dm, id_mc+vid] =   \
                     buf_d[n_dm:nap1, fid, vid]
 
-#                s_d[:, id_mc+vid, :]    =   \
-#                    buf_d[:, fid, vid, :].roll(-n_dm, 0)
-
 #                s_d[:, id_mc+vid]    =   \
-#                    s_d[:, id_mc+vid].roll(-n_dm, 0)
-
+#                    cp.roll(buf_d[:, fid, vid], -n_dm, 0)
+        cp.cuda.stream.get_current_stream().synchronize()
         t_ded   +=  time.time() - t_bm
  
 #        print('fft ...')
         t_bm    =   time.time()
         r_d     =   cp.fft.fft(s_d, n = cfg.nmc * cfg.npadding, axis = 1)
+        cp.cuda.stream.get_current_stream().synchronize()
         t_fft   +=  (time.time() - t_bm)
 
 #        s_d =   []
@@ -292,6 +291,7 @@ def fit_cupy(cfg, t0, t1, bl_no):
             else:
                 ds[nsum+1]  =   nsum_and_find_max_cupy(cfg, r_d[hnsum:nap-hnsum, :], nsum)
         ds_dms[dm]  =   ds
+        cp.cuda.stream.get_current_stream().synchronize()
         t_nsum  +=  (time.time() - t_bm)
 
 #        r_d =   []
@@ -301,15 +301,17 @@ def fit_cupy(cfg, t0, t1, bl_no):
     del buf_d
 
     if cfg.bm:
+        print('')
         print('t_load:  %f' % (t_load))
         print('t_cal:   %f' % (t_cal))
         print('t_ded:   %f' % (t_ded))
         print('t_set:   %f' % (t_set))
         print('t_fft:   %f' % (t_fft))
         print('t_nsum:  %f' % (t_nsum))
+
+        return [t_load, t_cal, t_ded, t_set, t_fft, t_nsum]
+
     return ds_dms
-
-
 
 # 1D fit
 def fit_torch(cfg, t0, t1, bl_no):
@@ -350,11 +352,13 @@ def fit_torch(cfg, t0, t1, bl_no):
     for dm in cfg.dms:
 
         s_d     =   torch.zeros((nap1, cfg.nmc), dtype=torch.complex64, device=cfg.dev)
+
 #        print('dm %.3f' % (dm))
         t_bm    =   time.time()
         s_d[:, :]   =   0.0
         for fid in range(cfg.nfreq):
             id_mc   =   cfg.id_mcs[fid]
+# never uncomment
 #            s_d[:, id_mc:id_mc+cfg.nchan]    =   \
 #                    buf_d[:, fid, :]
             for vid in range(cfg.nchan):
@@ -363,17 +367,15 @@ def fit_torch(cfg, t0, t1, bl_no):
                 s_d[0:nap1 - n_dm, id_mc+vid] =   \
                     buf_d[n_dm:nap1, fid, vid]
 
-#                s_d[:, id_mc+vid, :]    =   \
-#                    buf_d[:, fid, vid, :].roll(-n_dm, 0)
-
 #                s_d[:, id_mc+vid]    =   \
-#                    s_d[:, id_mc+vid].roll(-n_dm, 0)
-
+#                    buf_d[:, fid, vid].roll(-n_dm, 0)
+        torch.cuda.synchronize()
         t_ded   +=  time.time() - t_bm
- 
+
 #        print('fft ...')
         t_bm    =   time.time()
         r_d     =   torch.fft.fft(s_d, n = cfg.nmc * cfg.npadding, dim = 1)
+        torch.cuda.synchronize()
         t_fft   +=  (time.time() - t_bm)
 
         s_d =   []
@@ -391,6 +393,7 @@ def fit_torch(cfg, t0, t1, bl_no):
             else:
                 ds[nsum+1]  =   nsum_and_find_max_torch(cfg, r_d[hnsum:nap-hnsum, :], nsum)
         ds_dms[dm]  =   ds
+        torch.cuda.synchronize()
         t_nsum  +=  (time.time() - t_bm)
 
         r_d =   []
@@ -400,12 +403,17 @@ def fit_torch(cfg, t0, t1, bl_no):
 #    torch.cuda.empty_cache()
     
     if cfg.bm:
+        print()
         print('t_load:  %f' % (t_load))
         print('t_cal:   %f' % (t_cal))
         print('t_ded:   %f' % (t_ded))
         print('t_set:   %f' % (t_set))
         print('t_fft:   %f' % (t_fft))
         print('t_nsum:  %f' % (t_nsum))
+
+        return [t_load, t_cal, t_ded, t_set, t_fft, t_nsum]
+
+
     return ds_dms
 
 # 1D fit
@@ -438,10 +446,11 @@ def fit(cfg, t0, t1, bl_no):
     t_set   =   0.0
     t_fft   =   0.0
     t_nsum  =   0.0
+    _buf    =   buf.copy()
     for dm in cfg.dms:
         
         t_bm    =   time.time()
-        buf =   utils.dedispersion(cfg, buf, dm)
+        buf =   utils.dedispersion(cfg, _buf, dm)
         t_ded    +=  (time.time() - t_bm) 
 
         t_bm    =   time.time()
@@ -476,6 +485,9 @@ def fit(cfg, t0, t1, bl_no):
         print('t_set:   %f' % (t_set))
         print('t_fft:   %f' % (t_fft))
         print('t_nsum:  %f' % (t_nsum))
+
+        return [t_load, t_cal, t_ded, t_set, t_fft, t_nsum]
+
     return ds_dms
 
 def fit_2d(cfg, t0, t1, bl_no):
@@ -824,18 +836,17 @@ def main(scan_no):
     cfg.psize   =   psize
     cfg.use_dev = 'numpy'
 
+    if psize == 1:
+        combine_seg(cfg)
+        return
+
     cfg.use_dev = 'cupy'
 #    cfg.use_dev = 'torch'
-    cfg.bm  =   True
-#    cfg.bm  =   False
+#    cfg.bm  =   True
     if cfg.use_dev == 'cupy':
         open_cupy(cfg)
     if cfg.use_dev == 'torch':
         open_torch(cfg)
-
-    if psize == 1:
-        combine_seg(cfg)
-        return
 
     comm.Barrier()
     if psize < 2:
@@ -862,18 +873,110 @@ def compare_result(cfg, d1, d2):
             id  =   np.where(np.abs(m1 - m2) / m1 > 1E-6)[0]
             print('%d out of %d with deviation > 1E-6' % \
                     (len(id), len(m1)))
-            if nsum == 2:
-                np.save('cpu_gpu_compare.npy', (m1, m2))
+#            if nsum == 2:
+#                np.save('cpu_gpu_compare.npy', (m1, m2))
 #            print(m1)
 #            print(m2)
 
-def serial():
+def run_bm_load_seg():
+    
+    t_segs  =   [0.5, 1.0, 2.0, 4.0, 8.0]
+    arr =   []
+    for t_seg in t_segs:
+        _arr    =   bm_load_seg(t_seg)
+        print('%f: ' % (t_seg))
+        print(_arr)
+        arr.append(_arr)
+    arr =   np.array(arr)
+    print(arr)
+    np.save('benchmark/load_seg.npy', arr)
+
+def bm_load_seg(t_seg):
+
+    scan_no =   50
+    cfg     =   utils.gen_cfg(scan_no, t_seg = t_seg)
+
+    s1  =   cfg.stn2id['IR']
+    s2  =   cfg.stn2id['MC']
+    bl_no   =   (s1+1) * 256 + (s2+1) 
  
-    scan_no =   3
+    t0  =   25.
+    t0  =   int(t0 / cfg.tsum) * cfg.tsum
+    t1  =   t0 + cfg.t_seg
+
+    t11     =   t1 + cfg.t_extra
+    if t11 > cfg.dur:
+        t11 =   cfg.dur
+        t11 =   int(t11 / cfg.tsum) * cfg.tsum
+
+    cfg.bm_load_seg =   True
+    arr     =   cfg.load_seg(bl_no, t0, t11)
+    return arr
+
+def run_benchmark():
+
+    devs    =   ['numpy', 'torch', 'cupy']
+    t_segs  =   [0.5, 1.0, 2.0, 4.0, 8.0]
+
+    devs    =   ['torch']
+#    devs    =   ['cupy']
+#    devs    =   ['numpy']
+
+    for dev in devs:
+        print('dev: %s' % (dev))
+        arr =   []
+        for t_seg in t_segs:
+            print('  t_seg: %.1f s' % (t_seg))
+            arr.append(benchmark(dev, t_seg))
+        arr =   np.array(arr)
+#        print('rec2buf_C testing, result will not be saved!')
+        np.save('benchmark/%s.npy' % (dev), arr)
+
+def benchmark(dev, t_seg):
+ 
+    scan_no =   50
+    cfg     =   utils.gen_cfg(scan_no, t_seg = t_seg)
+    cfg.bm  =   True
+
+    s1  =   cfg.stn2id['IR']
+    s2  =   cfg.stn2id['MC']
+    bl_no   =   (s1+1) * 256 + (s2+1) 
+ 
+    t0  =   25.
+    t0  =   int(t0 / cfg.tsum) * cfg.tsum
+    t1  =   t0 + cfg.t_seg
+
+    if dev == 'numpy':
+        def f():
+            return fit(cfg, t0, t1, bl_no) 
+    elif dev == 'torch':
+        open_torch(cfg)
+        def f():
+            return fit_torch(cfg, t0, t1, bl_no) 
+    elif dev == 'cupy':
+        open_cupy(cfg)
+        def f():
+            return fit_cupy(cfg, t0, t1, bl_no) 
+
+    arr =   []
+    for i in range(11):
+        res =   f()
+        arr.append(res)
+
+    arr =   np.array(arr)
+    print(arr)
+    arr =   np.average(arr[1:, :], axis = 0)
+    print(arr)
+    return arr
+
+def run_compare():
+ 
+    scan_no =   50
 #    dms     =   np.arange(0, 1000.0, 50.0)
 #    cfg     =   utils.gen_cfg_el060(scan_no, dms = dms)
-    cfg     =   utils.gen_cfg(scan_no, t_seg = 4.0)
+    cfg     =   utils.gen_cfg(scan_no, t_seg = 2.0)
     cfg.bm  =   True
+    cfg.nsums   =   [16]
 
     s1  =   cfg.stn2id['IR']
     s2  =   cfg.stn2id['SV']
@@ -908,7 +1011,9 @@ def serial():
 
 if __name__ == '__main__':
 
-    serial()
+#    run_bm_load_seg()
+#    run_benchmark()
+#    run_compare()
 #    test()
 
     scan_nos1   =   np.arange(3, 18, 2)

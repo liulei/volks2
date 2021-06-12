@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import sys
 import os
 import time
+import ctypes
 
 swin_hdr = np.dtype([   ('sync', 'i4'), \
                         ('ver',  'i4'), \
@@ -230,7 +231,18 @@ class Config(object):
 
         self.sigma_winmatch     =   3.0
         self.ne_min_winmatch    =   2
+# for el060, nbl_min = 5
         self.nbl_min_crossmatch =   5
+
+        name_libio  =   './libio.so'
+        if os.path.exists(name_libio):
+            self.use_rec2buf_C  =   True
+            self.libio  =   ctypes.CDLL(name_libio)
+            print('Use C version rec2buf')
+        else:
+            self.use_rec2buf_C  =   False
+
+        self.bm =   False
 
     def load_difx_file(self, filename):
         f   =   open(filename, 'r')
@@ -555,12 +567,16 @@ class Config(object):
 
     def load_seg(self, bl_no, t0, t1):
 
+        t_find =   0.0
         if self.t0 <= t0 and self.t1 >= t1:
             recs    =   self.recs
         else:
             self.t0 =   t0
             self.t1 =   t1
+
+            _t  =   time.time()
             i0, i1  =   self.get_rec_range(t0, t1)
+            t_find =   time.time() - _t
 
             if i0 < 0:
                 recs   =   {}
@@ -568,8 +584,10 @@ class Config(object):
                 count   =   i1 - i0
 #                print('proc %d, read %d recs, size %.1f GB ... ' % \
 #                    (self.rank, count, count * self.rec_size / 1E9))
+                _t  =   time.time()
                 recs    =   self.read_rec(i0, i1 - i0)
 #                print('proc %d, read rec done!' % (self.rank))
+                t_read  =   time.time() - _t
 
             self.recs   =   recs
 
@@ -588,37 +606,81 @@ class Config(object):
 #            heads[pol]  =   np.zeros((nap, self.nfreq), dtype = swin_hdr)
 #            arr2recs[pol]   =   {}
 
-#        print('proc %d, %s recs will be loaded...' % (self.rank, len(recs)))
+        _t  =   time.time()
+        if not self.use_rec2buf_C:
+#        if True:
+            nc =   0
+            for i, rec in enumerate(recs):
 
-        nc =   0
-        for i, rec in enumerate(recs):
+                if rec['h']['no_bl']    !=  bl_no:
+                    continue
+                pol =   rec['h']['polar']
+                if pol not in self.pols:
+                    continue
+                fid     =   rec['h']['freq_idx']
+                if fid not in self.fids:
+                    continue
+                t_rec   =   self.dt(rec)
+                if t_rec < t0:
+                    continue
+                apid    =   int((t_rec - t0) / self.ap)
+                if apid >= nap:
+                    break
+                idx    =   self.fid2idx[fid]
+                bufs[pol][apid, idx, :]   =   rec['vis'][:]
+    #            heads[pol][apid, idx] =   rec['h']
+    #            arr2recs[pol][apid * self.nfreq + idx] =   i
+                nc +=  1
+        else:
+#        if True:
 
-            if rec['h']['no_bl']    !=  bl_no:
-                continue
-            pol =   rec['h']['polar']
-            if pol not in self.pols:
-                continue
-            fid     =   rec['h']['freq_idx']
-            if fid not in self.fids:
-                continue
-            t_rec   =   self.dt(rec)
-            if t_rec < t0:
-                continue
-            apid    =   int((t_rec - t0) / self.ap)
-            if apid >= nap:
-                break
-            idx    =   self.fid2idx[fid]
-            bufs[pol][apid, idx, :]   =   rec['vis'][:]
-#            heads[pol][apid, idx] =   rec['h']
-#            arr2recs[pol][apid * self.nfreq + idx] =   i
-            nc +=  1
-#            if nc % 10000 == 0:
-#                print('%d APs have been loaded.' % (nc))
+            bufs0 =   {}
 
-#        print('proc %d, loading rec done!' % (self.rank))
+            b_pol   =   []
+            for pol in [b'LL', b'RR', b'LR', b'RL']:
+                if pol in self.pols:
+                    b_pol.append(ctypes.c_void_p(bufs[pol].ctypes.data))
 
+#                    bufs0[pol]  =   bufs[pol].copy()
+#                    bufs[pol][:, :, :]  =   0.0
+
+                else:
+                    b_pol.append(None)
+
+            fidx    =   np.zeros(128, dtype = np.int32)
+            fidx[:] =   -1
+            for fid in self.fids:
+                fidx[fid]   =   self.fid2idx[fid]
+           
+            self.libio.rec2buf( ctypes.c_int(bl_no), \
+                                ctypes.c_void_p(recs.ctypes.data), \
+                                ctypes.c_long(len(recs)), \
+                                ctypes.c_int(self.mjd), \
+                                ctypes.c_double(self.sec), \
+                                ctypes.c_double(t0), \
+                                ctypes.c_double(self.ap), \
+                                ctypes.c_int(nap), \
+                                ctypes.c_int(self.nfreq), \
+                                ctypes.c_int(self.nchan), \
+                                ctypes.c_void_p(fidx.ctypes.data), \
+                                b_pol[0], b_pol[1], b_pol[2], b_pol[3])
+        t_r2b   =   time.time() - _t
+#        db  =   bufs0[b'LL'] - bufs[b'LL']
+#        ids =   np.where(db != 0.0)[0]
+#        print(ids)
+#
+#        db  =   bufs0[b'RR'] - bufs[b'RR']
+#        ids =   np.where(db != 0.0)[0]
+#        print(ids)
+
+        _t  =   time.time()
         if self.flag_l2u:
             bufs    =   self.bufs_l2u(bufs)
+        t_l2u   =   time.time() - _t
+        if 'bm_load_seg' in self.__dict__:
+            if self.bm_load_seg:
+                return [t_find, t_read, t_r2b, t_l2u]
+
         return heads, bufs, arr2recs
 
 # make sure that freqs are always from low to high sequantially
@@ -822,6 +884,8 @@ def gen_cfg_el060(scan_no, **kw):
     if scan_no >= 36:
         cfg.path        =   '/data/corr/el060_psr'
     cfg.fmt         =   'calc_%02d'
+ 
+# 0.5 s for CPU, 48 procs, ~4 s for GPU, ~4 procs per card
 #    cfg.t_seg       =   0.5 # 30 sec per seg
     cfg.t_seg       =   8 # 30 sec per seg
     if 't_seg' in kw.keys():
@@ -830,8 +894,8 @@ def gen_cfg_el060(scan_no, **kw):
     cfg.t_u         =   0.1 # 0.1 s for rounding
     cfg.flag_l2u    =   True
 
-#    cfg.fids        =   np.arange(8)
-    cfg.fids    =   np.arange(1, 8) # skip FREQ 0
+    cfg.fids        =   np.arange(8)
+#    cfg.fids    =   np.arange(1, 8) # skip FREQ 0
     cfg.fid2idx =   {}
     for i in range(len(cfg.fids)):
         fid =   cfg.fids[i]
@@ -871,6 +935,8 @@ def gen_cfg_el060(scan_no, **kw):
         cfg.dms  =   [192.4] # J1854+0306
     else:
         cfg.dms  =   [26.833] # J0332+5434
+#        cfg.dms  =   np.arange(10)[6:] * 10.0 # J0332+5434
+#        print('dms for benchmark: ', cfg.dms)
 
     if 'dms' in kw.keys():
         cfg.dms =   kw['dms']
