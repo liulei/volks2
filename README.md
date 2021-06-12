@@ -1,6 +1,8 @@
 # VOLKS2
 ### VLBI Observation for single pulse Localization Keen Searcher, 2nd release
 
+“VOLKS”为人民大众，意为发动群众，群策群力，在各种VLBI观测中寻找暂现源。
+
 ## Introduction
 This is the second release of the VOLKS pipeline. Significant updates have been made since its first release. 
 
