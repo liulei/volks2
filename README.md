@@ -56,12 +56,13 @@ VOLKS2 conducts SP search and localization with DiFX correlation result. Some se
 **Description**
 
 - All programs in the pipeline will first call `utils.gen_cfg()` to obtain the configuration. In this way modification of source code in any other programs is avoided. One need to set the specific task in `gen_cfg()` and then prepare the corresponding configuration class in e.g. `gen_cfg_el060()`. The description of each term is explained in the source file.
-
+ 
 **Input**:
 
 - Once `gen_cfg()` is invoked, `load_config()` will read and parse the `.input` and `.calc` files of the corresponding scan, and generate the configuraiton class.
 
-
+- When the `Config` class is initialized, it will check if `libio.so` exists. If this is the case, the C version `rec2buf()` in this lib will be used to speedup data loading.
+- 
 ### Initial calibration: `gen_cal_initial.py`
 **Description**:
 
