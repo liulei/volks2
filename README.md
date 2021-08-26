@@ -69,7 +69,7 @@ VOLKS2 conducts SP search and localization with DiFX correlation result. Some se
 ### Initial calibration: `gen_cal_initial.py`
 **Description**:
 
-- This program will conduct fringe fitting for each baseline, polarization and IF of the calibration scan, and derive the delay and initial phase for each IF and baseline. One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.
+- This program will conduct fringe fitting for each baseline, polarization and IF of the calibration scan, and derive the delay and initial phase for each IF and baseline. **One needs to specify the scan no of the calibration source and time range at the beginning of `main_cal()`.**
 
 **Input**:
 
@@ -238,3 +238,9 @@ Note: Due to the slightly different implementation of fitting algorithm, if GPU 
 
 - `.sp.npy`: `pd`, `tau`, `snr` keys of each baseline are required.
 - `cal_fine_NoXXXX.npy`: fine calibration result. One need to specify the nearby calibration source when solving.
+
+### Display: `showspec_all.py`
+
+**Description**:
+
+- This program generate spectrum plot for all baselines and stations at given scan and time range.
