@@ -34,6 +34,7 @@ The development of this pipeline is supported by the National Science Fundation 
 - `Liu, L., Tong, F., Zheng, W., Zhang, J. & Tong, L. 2018, AJ, 155, 98`, which describes the cross spectrum based single pulse search method.
 - `Liu, L., Zheng, W., Yan, Z. & Zhang, J. 2018, Research in Astronomy and Astrophysics, 18, 069`, which compares the cross spectrum based method and the auto based spectrum method for single pulse serach in VLBI observation.
 - `Liu, L., Jiang, W., Zheng, W., et al. 2019, AJ, 157, 138`, which describes the geodetic solving based single pulse localzation method.
+- `Liu, L., Xu, Z., Yan, Z., et al. 2021, accepted for publication in AJ, arXiv:2108.05602`
 
 Please do not hesitate to contact me (E-mail: liulei@shao.ac.cn, WeChat: thirtyliu) if you have any question.
 
@@ -57,7 +58,7 @@ VOLKS2 conducts SP search and localization with DiFX correlation result. Some se
 ### Prepare configuration: `utils.py`
 **Description**
 
-- All programs in the pipeline will first call `utils.gen_cfg()` to obtain the configuration. In this way modification of source code in any other programs is avoided. One need to set the specific task in `gen_cfg()` and then prepare the corresponding configuration class in e.g. `gen_cfg_el060()`. The description of each term is explained in the source file.
+- All programs in the pipeline will first call `utils.gen_cfg()` to obtain the configuration. In this way modification of source code in any other programs is avoided. One need to set the specific task in `gen_cfg()` and then prepare the corresponding configuration class. The detailed explanation of each term is explained in `gen_cfg_el060()` as an example.
  
 **Input**:
 

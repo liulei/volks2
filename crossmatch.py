@@ -195,7 +195,7 @@ def main():
     global scan_no, nbl
     scan_no =   int(sys.argv[1])
 
-    cfg =   utils.gen_cfg_el060(scan_no)
+    cfg =   utils.gen_cfg(scan_no)
 #    cfg =   utils.gen_cfg_aov025(scan_no)
 
     for dm in cfg.dms:

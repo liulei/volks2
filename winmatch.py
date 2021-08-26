@@ -461,7 +461,7 @@ def match(cfg, dm, blid):
 if __name__ == '__main__':
     global scan_no
     scan_no =   int(sys.argv[1])
-    cfg =   utils.gen_cfg_el060(scan_no)
+    cfg =   utils.gen_cfg(scan_no)
 #    with open('No%04d/blinfo.txt' % (scan_no), 'r') as f:
 #        nbl =   len(f.readlines())
 

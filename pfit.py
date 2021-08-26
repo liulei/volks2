@@ -829,7 +829,6 @@ def main(scan_no):
 
     if rank == 0 and not os.path.exists('No%04d' % (scan_no)):
         os.mkdir('No%04d' % (scan_no))
-    dms =   np.arange(0, 1000.0, 50.0)
     cfg =   utils.gen_cfg(scan_no, dms = dms)
 
     cfg.rank    =   rank
@@ -840,7 +839,7 @@ def main(scan_no):
         combine_seg(cfg)
         return
 
-    cfg.use_dev = 'cupy'
+#    cfg.use_dev = 'cupy'
 #    cfg.use_dev = 'torch'
 #    cfg.bm  =   True
     if cfg.use_dev == 'cupy':
@@ -1016,9 +1015,6 @@ if __name__ == '__main__':
 #    run_compare()
 #    test()
 
-    scan_nos1   =   np.arange(3, 18, 2)
-    scan_nos2   =   np.arange(20, 35, 2)
-    scan_nos    =   np.concatenate((scan_nos1, scan_nos2))
-#    for scan_no in scan_nos:
-#    for scan_no in [3]:
-#        main(scan_no)
+    scan_nos   =   np.arange(3, 18, 2)
+    for scan_no in scan_nos:
+        main(scan_no)

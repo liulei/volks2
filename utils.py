@@ -273,7 +273,8 @@ class Config(object):
         self.bw     =   float(self.get_val('BW (MHZ) 0')) * 1E6 # in Hz
         self.ap     =   float(self.get_val('INT TIME'))
         self.t_u    =   self.ap
-        self.nchan  =   int(self.get_val('NUM CHANNELS 0'))
+#        self.nchan  =   int(self.get_val('NUM CHANNELS 0')) 
+        self.nchan  =   int(self.get_val('NUM CHANNELS 0')) // int(self.get_val('CHANS TO AVG 0'))
         for fid in self.fids:
             self.freqs.append(float(self.get_val('FREQ (MHZ) %d' % (fid))) * 1E6) # in Hz
             self.sbs_raw.append(self.get_val('SIDEBAND %d' % (fid)))
@@ -837,14 +838,17 @@ def gen_cfg_aov025(scan_no, **kw):
     cfg.flag_l2u    =   True
     cfg.fids        =   np.arange(10, 16)
     cfg.fid2idx     =   {}
-    for fid in cfg.fids:
-        cfg.fid2idx[fid]    =   fid - 10
+    for i in range(len(cfg.fids)):
+        fid =   cfg.fids[i]
+        cfg.fid2idx[fid]    =   i
+
     cfg.load_config(scan_no)
     cfg.pols    =   [b'RR']
+    cfg.nsums   =   [2, 4, 8, 16]
 
 # 2-D fitting
-    cfg.df_mb       =   8E6
-    cfg.nmb         =   64 # for fitting
+#    cfg.df_mb       =   8E6
+#    cfg.nmb         =   64 # for fitting
 
 # 1-D fitting, new
     cfg.df_mc       =   cfg.bw / cfg.nchan
@@ -862,7 +866,7 @@ def gen_cfg_aov025(scan_no, **kw):
     cfg.freq_ref    =   cfg.freqs[0]
 
     for fid in range(cfg.nfreq):
-        cfg.id_mbs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mb + 0.5)
+#        cfg.id_mbs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mb + 0.5)
         cfg.id_mcs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mc + 0.5)
 
     cfg.tsum    =   cfg.nsums[-1] * cfg.ap
@@ -886,47 +890,70 @@ def gen_cfg_el060(scan_no, **kw):
     cfg.fmt         =   'calc_%02d'
  
 # 0.5 s for CPU, 48 procs, ~4 s for GPU, ~4 procs per card
-#    cfg.t_seg       =   0.5 # 30 sec per seg
-    cfg.t_seg       =   8 # 30 sec per seg
+    cfg.t_seg       =   0.5 # 30 sec per seg
+#    cfg.t_seg       =   8 # 30 sec per seg
+
     if 't_seg' in kw.keys():
         cfg.t_seg   =   kw['t_seg']
 #    print('Change t_seg to %f for testing...' % (cfg.t_seg))
-    cfg.t_u         =   0.1 # 0.1 s for rounding
-    cfg.flag_l2u    =   True
+    cfg.t_u         =   0.1 # 0.1 s for rounding, do not modify
+    cfg.flag_l2u    =   True # flip lsb to usb, always true
 
+# Select IFs for search. Note, here fid refers to different sky frequencies.
+# Polarizations within the same sky frequencies are set below with pols
     cfg.fids        =   np.arange(8)
 #    cfg.fids    =   np.arange(1, 8) # skip FREQ 0
+
+# The for loop below calculate index of each IF in the actual array. Don't modify!
     cfg.fid2idx =   {}
     for i in range(len(cfg.fids)):
         fid =   cfg.fids[i]
         cfg.fid2idx[fid]    =   i
 
+# Above params are required to load .input and .calc file.
     cfg.load_config(scan_no)
 
-# 2-D fitting
-    cfg.df_mb       =   16E6
-    cfg.nmb         =   32 # for fitting
+# Select polarizations.
+    cfg.pols    =   [b'LL', b'RR']
 
-# 1-D fitting, new
+# Select window sizes. Should be comparable with single pulse width
+    cfg.nsums   =   [2, 4, 8, 16]
+ 
+# 2-D fitting, discarded
+#    cfg.df_mb       =   16E6
+#    cfg.nmb         =   32 # for fitting
+
+# 1-D fitting. The frequency resolution
     cfg.df_mc       =   cfg.bw / cfg.nchan
     cfg.nmc         =   1
+# Initial channel number of the frequency 1-D array, before padding
     _nmc            =   int((cfg.freqs[-1] + cfg.bw - cfg.freqs[0]) / cfg.df_mc + 0.5)
+
+# Next power of 2
     while cfg.nmc < _nmc:
         cfg.nmc <<= 1
     cfg.id_mcs      =   {}
 
+# Two times padding
     cfg.npadding    =   2
     nfft    =   cfg.nmc * cfg.npadding
     dtau    =   1. / cfg.df_mc / nfft
+
+# Delay search resolution
     cfg.tau_mc      =   np.fft.fftshift((np.arange(nfft) - nfft/2) * dtau)
 
-    cfg.freq_ref    =   cfg.freqs[0]
-
+# Find the starting index of each IF (sky frequency) in the array
     for fid in range(cfg.nfreq):
-        cfg.id_mbs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mb + 0.5)
+#        cfg.id_mbs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mb + 0.5)
         cfg.id_mcs[fid] =   int((cfg.freqs[fid] - cfg.freq_ref) / cfg.df_mc + 0.5)
 
+# Reference frequency for fringe fitting
+    cfg.freq_ref    =   cfg.freqs[0]
+
+# The length of extra data for dedispersion should be at least max window size
     cfg.tsum    =   cfg.nsums[-1] * cfg.ap
+
+# List of DMs
     if scan_no <= 17:
 #        cfg.dms =   [0.0, 100.0, 196.] # J1819-1458
         cfg.dms =   [196.] # J1819-1458
@@ -941,11 +968,14 @@ def gen_cfg_el060(scan_no, **kw):
     if 'dms' in kw.keys():
         cfg.dms =   kw['dms']
 
+# Reference frequency for dedispersion, default to highest frequency
     cfg.freq_dm     =   cfg.freqs[-1] + cfg.bw
     t_shift         =   calc_tshift(cfg.freqs[0] - cfg.bw, cfg.freqs[-1] + cfg.bw, np.max(cfg.dms))
     cfg.t_extra     =   int(np.ceil(t_shift / cfg.tsum)) * cfg.tsum
+# Extra data length for dedispersion
     print('t_extra:     %f s' % (cfg.t_extra))
 
+# Generate AP shift table for each DM and frequency point.
     cfg.tb  =   cfg.prep_dedispersion()
 
     return cfg
