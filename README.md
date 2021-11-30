@@ -34,7 +34,7 @@ The development of this pipeline is supported by the National Science Fundation 
 - `Liu, L., Tong, F., Zheng, W., Zhang, J. & Tong, L. 2018, AJ, 155, 98`, which describes the cross spectrum based single pulse search method.
 - `Liu, L., Zheng, W., Yan, Z. & Zhang, J. 2018, Research in Astronomy and Astrophysics, 18, 069`, which compares the cross spectrum based method and the auto based spectrum method for single pulse serach in VLBI observation.
 - `Liu, L., Jiang, W., Zheng, W., et al. 2019, AJ, 157, 138`, which describes the geodetic solving based single pulse localzation method.
-- `Liu, L., Xu, Z., Yan, Z., et al. 2021, accepted for publication in AJ, arXiv:2108.05602`
+- `Liu, L., Xu, Z., Yan, Z., et al. 2021, AJ, 162, 159, arXiv:2108.05602`, which introduces the VOLKS2 pipeline and the EL060 observaion.
 
 Please do not hesitate to contact me (E-mail: liulei@shao.ac.cn, WeChat: thirtyliu) if you have any question.
 
